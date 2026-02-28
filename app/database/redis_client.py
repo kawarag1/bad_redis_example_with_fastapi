@@ -26,6 +26,7 @@ class RedisClient:
             await self.redis.close()
 
     async def store_access_token(self, user_id: int, token: str, expires_in: int):
+        #надо короче дописать чтобы он перебирал сет токенов сесси пользователя, удалял это всё и записывал по новой при повторной авторизации
         key = f"{settings.JWT_REDIS_PREFIX}access:{token}"
         await self.redis.setex(key, expires_in, str(user_id))
             
