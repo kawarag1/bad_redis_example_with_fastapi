@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional
 
 from redis.asyncio import Redis
@@ -29,6 +30,7 @@ class RedisClient:
         await self.redis.setex(key, expires_in, str(user_id))
             
         session_key = f"{settings.JWT_USER_SESSIONS_PREFIX}{user_id}"
+        
         await self.redis.sadd(session_key, token)
         await self.redis.expire(session_key, expires_in * 2)  # Дольше, чем токен
         
@@ -37,12 +39,13 @@ class RedisClient:
         await self.redis.setex(key, expires_in, str(user_id))
 
         session_key = f"{settings.JWT_USER_SESSIONS_PREFIX}{user_id}"
+
         await self.redis.sadd(session_key, token)
         await self.redis.expire(session_key, expires_in * 2)
 
-    async def validate_access_token(self, token:str) -> Optional[int]:
+    async def validate_access_token(self, token:str) -> bool:
         if await self.is_token_blacklisted(token):
-            return None
+            return False
         
         key = f"{settings.JWT_REDIS_PREFIX}access:{token}"
         user_id = await self.redis.get(key)
@@ -71,10 +74,24 @@ class RedisClient:
         tokens = await self.redis.smembers(session_key)
         
         for token in tokens:
-            # Добавляем в черный список
-            await self.blacklist_token(token, 86400)  # 24 часа
+            if isinstance(token, bytes):
+                token = token.decode('utf-8')
+
+            access_key = f"{settings.JWT_REDIS_PREFIX}access:{token}"
+            refresh_key = f"{settings.JWT_REDIS_PREFIX}refresh:{token}"
+
+            access_ttl = await self.redis.ttl(access_key)
+            refresh_ttl = await self.redis.ttl(refresh_key)
+
+
+            if access_ttl > 0:
+                await self.blacklist_token(token, access_ttl)
+            
+            if refresh_ttl > 0:
+                await self.blacklist_token(token, refresh_ttl)
+            
             # Удаляем из хранилища токенов
-            await self.redis.delete(f"{settings.JWT_REDIS_PREFIX}access:{token}")
+            await self.redis.delete(access_key, refresh_key)
         
         # Удаляем сессию
         await self.redis.delete(session_key)
