@@ -43,4 +43,11 @@ class UserService:
         if not user:
             raise HTTPException(status_code=400, detail="Пользователь с такими именем и фамилией не найден.")
 
-        return await self.get_user_tokens(sub=str(user.id))
+        tokens = await self.get_user_tokens(sub=str(user.id))
+        await JWTManager.store_tokens(user.id, tokens.access_token, tokens.refresh_token)
+        return tokens
+    
+
+    async def blacklist_user(self, user_id: int):
+        await redis_client.revoke_all_user_tokens(user_id)
+        return user_id
