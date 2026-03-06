@@ -24,7 +24,7 @@ class UserService:
             refresh_token=await jwt_manager.encode_token(token_payload, JWTTokenType.REFRESH),
         )
 
-    async def register_user(self, user_register: UserRegister) -> AccessToken:
+    async def register_user(self, user_register: UserRegister, device_info: dict) -> AccessToken:
         existing_user = await self._user_repository.ensure_exists(username=user_register.username)
         if existing_user:
             raise HTTPException(status_code=400, detail="Такой игрок уже зарегистрирован!")
@@ -33,17 +33,29 @@ class UserService:
             **user_register.model_dump(exclude={"password"}, exclude_unset=True),
             password=user_register.password,
         )
-        tokens = await self.get_user_tokens(sub=str(user.id))
+        tokens = await self.get_user_tokens(
+            sub=str(user.id),
+            device_type=device_info.get("type", "unknown"),
+            device_os=device_info.get("os", "unknown"),
+            device_browser=device_info.get("browser", "unknown"),
+            device_model=device_info.get("device", "unknown")
+        )
         await JWTManager.store_tokens(user.id, tokens.access_token, tokens.refresh_token)
         return tokens
 
-    async def authorize_user(self, username: str, password: str) -> AccessToken:
+    async def authorize_user(self, username: str, password: str, device_info: dict) -> AccessToken:
         user = await self._user_repository.get_by_filter_one(username=username)
-
         if not user:
             raise HTTPException(status_code=400, detail="Пользователь с такими именем и фамилией не найден.")
 
-        tokens = await self.get_user_tokens(sub=str(user.id))
+        
+        tokens = await self.get_user_tokens(
+            sub=str(user.id),
+            device_type=device_info.get("type", "unknown"),
+            device_os=device_info.get("os", "unknown"),
+            device_browser=device_info.get("browser", "unknown"),
+            device_model=device_info.get("device", "unknown")
+        )
         await JWTManager.store_tokens(user.id, tokens.access_token, tokens.refresh_token)
         return tokens
     
